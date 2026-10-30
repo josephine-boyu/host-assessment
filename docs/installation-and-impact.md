@@ -1,6 +1,8 @@
 # 安裝項目、主機異動與影響清單
 
-一般 `collect`／`report`／`daily`／`daily-all`／`window-report` 不會替目標主機安裝套件或常駐服務，也不會自動調整 PHP、swap 或 EC2 規格。`ops-audit check` 只檢查本機設定；各 monitor 腳本的 `--check` 則會透過 SSH 唯讀查核目標主機。安裝與變更腳本須另行明確執行；先對 staging 做 preflight，再逐台授權。
+一般 `collect`／`report`／`daily`／`daily-all`／`window-report` 不會替目標主機安裝套件或常駐服務，也不會自動調整 PHP、swap 或 EC2 規格。`node bin/ops-audit.mjs check` 只檢查本機設定；各 monitor 腳本的 `--check` 則會透過 SSH 唯讀查核目標主機。安裝與變更腳本須另行明確執行；先對 staging 做 preflight，再逐台授權。
+
+PHP／HTTP 安裝器使用 `httpd`、`php-fpm` 與 `/etc/httpd/conf.d`、`/etc/php-fpm.d/www.conf`；一般 Linux 可盤點不代表適用這些安裝器。Nginx、Debian apache2、自訂 pool 或其他路徑不能直接照跑。驗收限已記錄的 Amazon Linux／systemd 測試環境，每台仍須 preflight。
 
 ## 管理者電腦
 
@@ -31,7 +33,7 @@
 
 ## 全新安裝與資料相容性
 
-1. 完成本機依賴、SSH alias 與唯讀 AWS profile 設定，先跑 `ops-audit check`。
+1. 完成本機依賴、SSH alias 與唯讀 AWS profile 設定，先跑 `node bin/ops-audit.mjs check`。
 2. 依需要選用監控；先在測試主機執行各腳本的 `--check`，審核上表影響後才明確執行 `--apply`。同時使用 PHP／HTTP monitor 時先安裝 PHP，再安裝 HTTP。
 3. 確認服務、timer 與摘要正常後開始每日蒐集，累積至少 14 天具代表性的有效證據，再依分析 SOP 評估。
 

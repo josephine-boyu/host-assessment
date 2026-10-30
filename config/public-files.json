@@ -24,6 +24,7 @@
   "config/public-files.json",
   "docs/case-studies/wordpress-rightsizing.md",
   "docs/cloud-rightsizing.md",
+  "docs/command-guide.md",
   "docs/cloudwatch-agent-impact.md",
   "docs/cloudwatch-agent-installation.md",
   "docs/crawler-light-monitor.md",

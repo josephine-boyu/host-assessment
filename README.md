@@ -1,252 +1,91 @@
 # Host Assessment
 
-唯讀主機盤點與資源配置評估工具。公開 repo 名稱為 `host-assessment`。
+唯讀主機盤點與資源配置評估工具，輸出 JSON／Markdown 報告，協助找出資源壓力、PHP-FPM 設定風險，以及是否具備試降規格的證據。
 
-用來盤點各專案主機的硬體資源、服務設定與潛在瓶頸，協助判斷是否需要升降規格、調整 PHP-FPM 等服務參數，並留下可比較的健檢報告。
+報告包含現況數據、風險提示、設定候選值與資料不足原因。建議供人工審核，不會自動調整主機或挑選最低價機型；單次快照不能作為降規依據。核心分析使用規則，不依賴 AI。
 
-## 三層使用入口
+## 適用環境與驗證範圍
 
-| 層次 | 用途 | 入口 |
+| 功能 | 適用條件 | 驗證範圍與限制 |
 | --- | --- | --- |
-| 工具 | 收集、規則分析、輸出報告 | 下方快速開始、[匿名範例](examples/)、[設定範本](config/projects.example.json) |
-| 分析 SOP／Skill 素材 | 根據證據提出設定與規格建議 | [主機資源分析 SOP](docs/sop/rightsizing-analysis.md)；供人與 AI 使用，尚未封裝成可安裝 skill |
-| 匿名案例 | 展示分析過程、限制與取捨 | [WordPress／PHP-FPM 試降案例](docs/case-studies/wordpress-rightsizing.md)，選讀，不是通用預設值 |
+| SSH 唯讀快照 | Linux、Bash、SSH；部分項目需 sudo -n | 有 Linux／WordPress 使用經驗與 collector 測試；不同發行版、權限及服務可能缺資料，並非跨發行版相容保證 |
+| AWS 歷史與規格分析 | EC2／CloudWatch 唯讀權限；RAM 歷史需已有相容 CWAgent 指標 | AWS adapter 與分析規則有測試；daily／daily-all 目前限 AWS。GCP collector 尚未實作 |
+| 目標規格評估 | AWS WordPress、完整趨勢與目標容量、業務尖峰事件 | assess 支援 recommend／target；資料不足不給試降候選，尚無通用升級 SKU 推薦 |
+| PHP-FPM／HTTP 監控安裝（選用） | systemd、Apache httpd、php-fpm，符合安裝器固定服務與設定路徑 | 已有隔離 Amazon Linux／systemd 安裝及回滾驗收；不能直接套用 Nginx、Debian apache2 或任意 PHP 版本／pool 配置。高流量尚未全面驗收 |
+| CloudWatch Agent／crawler 監控（選用） | 各安裝器要求的套件、路徑及權限 | 不在上述 PHP／HTTP lifecycle 完整驗收範圍；逐台先做 preflight |
 
-使用者可以先指定目標，請分析驗證可行性；也可以先盤點後取得建議。唯讀離線 `assess` 支援 `recommend` 與 `target` 兩種模式，詳見 [分析 SOP](docs/sop/rightsizing-analysis.md)。目標模式目前限 AWS WordPress，必須提供可核對的規格與業務事件；它不是最低價機型搜尋器。既有 daily 的預設目標仍為 `t3.medium`，缺少目標容量證據時會輸出資料不足。
+安裝條件及異動詳見 [安裝項目與影響](docs/installation-and-impact.md)，已驗證流程見 [monitor lifecycle 驗收](docs/monitor-lifecycle-validation.md)。
 
-長期項目見 [ROADMAP](ROADMAP.md)，發布品質要求見 [檢核表](docs/public-release-priorities.md)。
+## 先看一份報告
 
-目前已支援 Linux／WordPress 唯讀快照、AWS CloudWatch 歷史、CloudWatch Agent guest metrics、PHP-FPM／HTTP 尖峰監控、多專案每日批次與 JSON／Markdown 分析報告。GCP collector、動態價格與選用 AI 分析仍在規劃中；核心判斷不依賴 AI。
+本機需要 Node.js 20+ 與 npm。下載 repo 並進入專案根目錄後執行：
 
-目前的 `wp-server-audit.sh` 是唯讀的 WordPress/Linux 主機健檢腳本，會檢查 CPU、記憶體、swap、磁碟、負載、Web Server、PHP-FPM、OOM 紀錄、資料庫與 WP-Cron。它只提供風險提示，不會修改遠端設定，也不能只靠單次快照直接決定主機升降規格。
-
-## 快速開始
-
-執行前請先讀 [安裝項目、主機異動與影響清單](docs/installation-and-impact.md)。其中分開列出本機必要依賴、主機選用監控、費用與效能影響，以及更新／停止／回滾的限制。一般盤點不會自動替主機安裝 Agent 或服務。
-
-需求：本機 Node.js 20 以上、Bash 與 OpenSSH，先執行 `npm ci` 安裝鎖定的依賴（Windows PowerShell 可用 `npm.cmd ci`）；目標 Linux 主機允許 SSH 登入。部分 kernel log 與設定需要目標帳號具備 `sudo -n` 權限，沒有權限時腳本會略過相關項目。
-
-建議先在 `~/.ssh/config` 建立不含密鑰內容的連線別名：
-
-```sshconfig
-Host example-wp-staging
-  HostName 203.0.113.10
-  User ubuntu
-  IdentityFile ~/.ssh/example-wp-staging.pem
-  Port 22
+```sh
+npm ci
+node bin/ops-audit.mjs analyze examples/host-snapshot.json reports/demo.json reports/demo.md
 ```
 
-手動執行：
+Windows PowerShell 若阻擋 npm.ps1，第一行改用 `npm.cmd ci`。
 
-```bash
-./wp-server-audit.sh example-wp-staging
-```
+安裝依賴可能需要網路；安裝完成後，上述範例分析可離線執行，不需 SSH／AWS 憑證，也不連線主機。開啟產生的 `reports/demo.md`，或直接閱讀 [匿名範例報告](examples/host-analysis.md) 與 [範例輸入](examples/host-snapshot.json)。範例只展示格式與規則判讀，不能作為真實主機降規依據。
 
-腳本也相容既有的參數形式：
+## 盤點真實主機前的準備
 
-```bash
-./wp-server-audit.sh user@host /path/to/private-key.pem 22
-```
+1. 本機準備 Bash 與 OpenSSH（Windows 可使用 Git for Windows），在自己的 SSH config 建立 Host alias，核對主機 fingerprint。私鑰留在 SSH／憑證管理服務。
+2. AWS 歷史分析另外需要唯讀 AWS profile；權限與安裝影響先閱讀 [操作影響清單](docs/installation-and-impact.md)。一般 SSH 快照不需要 AWS 憑證。
+3. 需要多專案管理時，複製 `config/projects.example.json` 為 `config/projects.local.json`，調整目標及啟用狀態後執行：
 
-私鑰路徑含空白時必須加引號。第一次連線會由 OpenSSH 記錄 host key；正式環境應另行核對 fingerprint。
-
-若自動化或隔離執行環境的 `~/.ssh/config` 不是實際設定檔，可明確指定：
-
-```bash
-SSH_CONFIG='C:/Users/your-name/.ssh/config' ./wp-server-audit.sh example-wp-staging
-```
-
-## 管理多台主機
-
-新的 projects 設定是後續多專案批次盤點的入口。先複製範本，密鑰仍只保存在 SSH/AWS 的使用者設定中：
-
-```powershell
-Copy-Item config/projects.example.json config/projects.local.json
+```sh
 node bin/ops-audit.mjs check
 ```
 
-`check` 只讀取本機 projects JSON、SSH config 與 AWS named profile 的名稱，不會連線 SSH，也不會呼叫 AWS/GCP。它會檢查重複或不安全的專案 ID、workload type、SSH alias、AWS profile 及歷史天數。已啟用專案缺少必要設定會回傳 error；尚未啟用的 production 或 crawler 則回傳 warning，方便先完成設定再明確啟用。
+`check` 會讀入 projects JSON、SSH config 與 AWS credentials/config 的文字，解析 alias／profile 名稱；不連線主機或雲端，也不將金鑰內容寫入檢查結果。格式錯誤一律是 error；停用專案缺少本機 alias／profile 才降為 warning。整份 SSH config 不存在仍是 error。通過靜態檢查不代表連線或 IAM 權限有效。
 
-目前支援的 `type` 是 `linux`、`wordpress`、`crawler`。`config/projects.local.json` 不會被 Git 追蹤，可版控格式以 `config/projects.example.json` 為準。
+確認目標並取得授權後，執行一次唯讀快照及報告（將別名替換為自己的）：
 
-靜態檢查通過後，可批次執行所有 `enabled: true` 的 AWS 專案：
+```sh
+node bin/ops-audit.mjs report example-wp-staging reports/example-wp-staging
+```
+
+環境變數可透過 PowerShell 或 Bash 設定：
 
 ```powershell
-node bin/ops-audit.mjs daily-all
+$env:SSH_CONNECT_TIMEOUT='8'
 ```
-
-`daily-all` 逐台執行，每個專案使用自己的 `cloud.profile` 與 `history_days`。單台失敗不會中止其他專案；結果寫入各主機原有的每日目錄，並在同日目錄新增 `batch-manifest.json`。目前非 AWS provider 會被記錄為失敗而不執行；crawler 暫時只使用共用 Linux collector，專屬 queue／重試檢查尚未加入。
-
-預期在一般批次時間關機的專案可設定 `"include_in_daily_all": false`，讓無參數的 `daily-all` 略過；仍可用 `daily-all --project <id>` 在專屬排程中執行單台。`enabled: false` 則會同時禁止批次與單台執行。
-
-WordPress/PHP 專案可在個別 project 加入預期 PHP 並行數，讓每日分析依主機 RAM、觀測到的最大 worker RSS 與 25% 安全係數計算 PHP-FPM 候選值：
-
-```json
-"workload": {
-  "php_fpm": {
-    "expected_concurrency": 4
-  }
-}
-```
-
-`expected_concurrency` 是尖峰時「同時執行中的 PHP 請求數」，不是登入人數。報告會列出非 PHP 記憶體保留量、worker 預算、記憶體可承載上限，以及 `pm`、`pm.max_children`、`pm.max_requests` 候選值；若容量不足或資料缺漏則明確提示。這些值只供驗證，不會自動修改 PHP-FPM。單獨執行 `analyze`、`report` 或 `daily` 時，也可用環境變數 `PHP_FPM_EXPECTED_CONCURRENCY` 提供相同資訊。
-
-匿名 staging 案例的 t3.small 與 t3.micro 候選、歷史高點計算及驗證停止條件，記錄於 `docs/php-fpm-sizing.md`；機型選擇、排程關機與固定 Public IPv4 成本試算記錄於 `docs/staging-instance-sizing.md`。
-
-Windows 建議複製 `config/daily-all.example.cmd` 為不追蹤的 `config/daily-all.local.cmd`，由 wrapper 設定本機路徑並在執行前確認必要檔案存在：
-
-```powershell
-# 執行全部 enabled: true 的專案
-config\daily-all.local.cmd
-
-# 只執行指定且 enabled: true 的專案
-config\daily-all.local.cmd example-wp-staging
-```
-
-指定單台不會繞過 `enabled`：若該專案是 `enabled: false`，命令會停止且不連線。直接執行 Node CLI 但未設定 `SSH_COMMAND` 時，Windows 會提示目前將使用系統 ssh；SSH config 與 AWS 設定檔／profile 不存在則會在 preflight 停止。
-
-1. 複製 `config/hosts.example.tsv` 為 `config/hosts.tsv`。
-2. 每台主機填一列：專案、環境、SSH alias、盤點腳本。
-3. 私鑰只放在 `~/.ssh` 或密鑰管理服務，不寫入 TSV、`.env` 或 Git。
-4. 健檢輸出存入 `reports/`，分享前先移除不必要的主機識別資訊。
-
-批次執行全部已啟用的資料列：
 
 ```bash
-./audit-all.sh
+export SSH_CONNECT_TIMEOUT=8
 ```
 
-只驗證清單格式與目標、不連線主機：
+**程式不會自動載入 .env。** [.env.example](.env.example) 是參數參考，僅複製或填寫不會生效；也可使用 [Windows wrapper 範本](config/daily-all.example.cmd) 設定執行環境。`npm ci` 不會把 `ops-audit` 加入一般終端機的 PATH，本文件使用可直接執行的 `node bin/ops-audit.mjs`。
 
-```bash
-./audit-all.sh --check
-```
+## 哪些操作會修改主機
 
-每次執行會建立 `reports/<時間戳>/`，內含各主機的 Markdown 與 `summary.tsv`；摘要會列出執行狀態與 Critical/Warning 風險數。單台失敗不會中斷其餘主機；全部跑完後只要有失敗，runner 會回傳非零狀態，方便未來接排程或 CI。以 `#` 開頭的主機列不會執行，可先保留尚未設定完成的第二台。
+| 操作 | 影響 |
+| --- | --- |
+| analyze／assess、check | 本機讀取與分析；報告寫入本機，check 不連線 |
+| collect／report／daily／daily-all／window-report | 讀取遠端或雲端資料、寫入本機報告；不安裝服務或調整主機。查詢仍消耗 CPU／I/O，SSH／sudo 可能留下系統稽核日誌 |
+| monitor 的 --check | 會透過 SSH 唯讀查核主機，不等同本機 check |
+| 選用安裝／調校／回滾腳本 | 明確執行後才修改套件、服務、設定或 timer，部分操作會重載 Apache／PHP-FPM；須先審核影響、備份與回滾方式 |
 
-`config/hosts.tsv`、`.env` 與 `reports/` 都已由 `.gitignore` 排除。`.env.example` 只示範非敏感的共用參數；密碼、token 與私鑰不應放進環境檔，即使該檔未被 Git 追蹤也一樣。
+一般盤點不會自動安裝監控。CloudWatch Agent custom metrics 與雲端 API 可能計費；唯讀也不等於零負擔。完整項目與停止方式見 [安裝與影響清單](docs/installation-and-impact.md)。
 
-需要診斷 Linux/EBS 寫入來源時，可執行唯讀的 `scripts/disk-write-audit.sh <ssh-alias>`；它會盤點 journal/log、近期大檔與程序累積寫入量。使用方式與 crawler 首次判讀見 `docs/disk-write-audit.md`。
+## 後續使用入口
 
-需要補足 PHP-FPM 尖峰時，可使用 `scripts/php-fpm-monitor.sh`。它會在明確 `--apply` 後建立 loopback-only status、每分鐘 hardened systemd oneshot 與 35 天數值歷史；不收 request URI 或 WordPress 資料，也不調整 PHP-FPM 容量設定。安全邊界、異動範圍、回滾及本機測試見 `docs/php-fpm-peak-monitor.md`。每日 collector 只取回最近 14 天摘要，不下載逐分鐘原始資料。
+| 目的 | 文件 |
+| --- | --- |
+| 多主機、批次、AWS 歷史與命令範例 | [命令指南](docs/command-guide.md) |
+| 評估規格、設定候選值與證據門檻 | [分析 SOP／Skill 素材](docs/sop/rightsizing-analysis.md)（尚非可安裝 skill）、[匿名案例](docs/case-studies/wordpress-rightsizing.md) |
+| 收集頻率與觀測期 | [監控策略](docs/monitoring-strategy.md) |
+| 選用 PHP／HTTP 尖峰監控 | [PHP monitor](docs/php-fpm-peak-monitor.md)、[HTTP monitor](docs/production-rightsizing-observation.md) |
+| 選用 guest RAM 歷史 | [CloudWatch Agent](docs/cloudwatch-agent-installation.md) |
+| 本機每日排程 | [Windows 排程](docs/windows-scheduler.md)（需自行建立） |
+| 指定日期分析與資料品質 | [區間重算](docs/window-recompute.md)、[資料相容性](docs/installation-and-impact.md#全新安裝與資料相容性) |
 
-正式站 14 天降規決策還需要匿名 HTTP latency／5xx、PHP-FPM PSS/queue、EBS 飽和度及一次 PDF/email 業務尖峰。`scripts/http-metrics-monitor.sh` 提供分離的 `--check`、`--apply`、`--summary`、`--rollback` 介面；事件可用 `ops-audit mark-event` 在本機記錄。完整證據門檻、安全範圍與指令見 `docs/production-rightsizing-observation.md`。
+規格評估需累積具代表性的有效證據，涵蓋尖峰；目前 14 天試降判斷有 coverage 與業務事件等門檻，天數足夠不代表一定可降規。詳細依分析 SOP，不以範例候選值代替量測。
 
-HTTP 原始數值日誌由 Apache `rotatelogs` 保留兩個 10 MiB 循環檔（可能超出一個寫入 buffer），不再依賴每日 logrotate 才限制大小；每次 sampler 最多處理 1 MiB。輪替／Apache 重載，以及超量跳過的批次，都會留下資料缺口標記，該觀測視窗不會產生試降候選。這是偏保守、適合低流量站點的設計；高流量站點應使用具備完整流量處理能力的監控方案，不能直接調大限制後宣稱已驗證。安裝需至少 128 MiB 可用日誌空間，仍須納入其他應用日誌與磁碟用量。
+## 安全與協作
 
-EBS 每日證據必須完整符合觀測日期，指定視窗須符合每段起訖；業務事件的 `target` 必須與被分析主機相同。HTTP 來源版本、有效起點或缺口資訊無法驗證時回報資料不足；重新產生摘要不能替不相容的來源資料補齊證據。
+AI 協作者先讀 [AGENTS.md](AGENTS.md)。真實 reports、本機設定、.env、私鑰及憑證不提交；分享報告前去除 IP、hostname、帳號、雲端資源 ID 與業務資訊。
 
-PHP-FPM／HTTP monitor 的隔離安裝、更新與回滾測試，見 [systemd lifecycle 驗收](docs/monitor-lifecycle-validation.md)。此測試須明確執行，不會隨一般 `npm test` 啟動 Docker。
-
-## 如何判斷升降規格
-
-需要排除部署前的問題、重新分析指定期間時，使用 [指定區間重新彙整](docs/window-recompute.md) 的 `window-report`。它重新讀取來源資料並另存報告，支援明確時區與部分日，不會從舊彙總硬切出不存在的資料。
-
-單次健檢適合找明顯風險，例如沒有 swap、近期 OOM、PHP-FPM 理論上限不合理或磁碟接近滿載。要做成本調整，仍需搭配至少 7～30 天的 CPU、記憶體、swap、磁碟 I/O、網路、PHP-FPM queue/active workers、Web latency 與資料庫指標，並保留尖峰餘裕。
-
-建議流程是：先盤點 → 收集一段時間的趨勢 → 提出升降規格或設定建議 → 人工核准 → 另行變更 → 再觀察。盤點腳本與變更腳本應保持分離。
-
-先依 [分析 SOP](docs/sop/rightsizing-analysis.md) 確認目標與證據，再參考 [匿名案例](docs/case-studies/wordpress-rightsizing.md)。案例示範慢 AJAX、PSS、pool 預演與試降規劃，沒有宣稱已完成硬體降規驗證。
-
-報告資訊分成四個層次：
-
-- **現況事實**：硬體、作業系統、服務狀態、PHP-FPM pool、資料庫與排程方式。
-- **風險提示**：OOM、無 swap、磁碟偏滿、負載超過核心數、服務未自動啟動等。
-- **設定建議**：可依量測結果建議 `pm.max_children`、slow log、swap、systemd restart policy 等；建議不會自動套用。
-- **規格建議**：需要趨勢監控後才能可靠判斷升降級。AWS/GCP 比較方法與限制整理在 `docs/cloud-rightsizing.md`。
-
-## JSON 收集與分析報告
-
-流程將資料收集、規則分析與呈現分開。需要本機 Node.js 20 以上，並以 `npm ci` 安裝包含 AWS SDK v3 的依賴。
-
-從主機收集唯讀快照：
-
-```bash
-SSH_CONFIG='C:/Users/your-name/.ssh/config' \
-  node bin/ops-audit.mjs collect example-wp-staging reports/example-wp-staging.json
-```
-
-若 Windows OpenSSH 因既有私鑰 ACL 拒絕連線，而該連線已由 Git Bash 驗證，可明確指定 Git for Windows 的 SSH adapter：
-
-```powershell
-$env:SSH_COMMAND='C:/Program Files/Git/usr/bin/ssh.exe'
-```
-
-套用規則並產生 JSON 與 Markdown 分析報告：
-
-```bash
-node bin/ops-audit.mjs analyze \
-  reports/example-wp-staging.json \
-  reports/example-wp-staging-analysis.json \
-  reports/example-wp-staging-analysis.md
-```
-
-規則只根據 JSON 中存在的證據產生結果；單次快照固定提示資料不足以支持降規。AWS 歷史監控已接入；GCP 與選用 AI 深度分析尚未實作。
-
-蒐集頻率、最低觀測期與升降規條件詳見 `docs/monitoring-strategy.md`。原則是雲端指標持續收集、工具每日彙整；正式降規通常至少需要 14 天，建議觀察 30 天並涵蓋業務尖峰。
-
-AWS 歷史 collector 使用本機 Node.js 與 AWS SDK v3，不在 EC2 安裝 Node.js。設定好 `AWS_PROFILE` 後，可從既有 host JSON 讀取 instance ID 與 region：
-
-```powershell
-$env:AWS_PROFILE='your-readonly-profile'
-node bin/ops-audit.mjs aws-history reports/example-wp-staging.json reports/history/aws-14d.json 14
-```
-
-輸出只包含已完成的 UTC 日，並標示 metric coverage、14 天初評或 30 天正式評估階段。預設只讀既有 `AWS/EC2` 指標；若同一 instance 已發布 `CWAgent` 的 RAM、swap 與 root disk 指標，collector 會自動發現並合併 daily average／p95／max 與 coverage。不開啟 EC2 Detailed Monitoring。執行環境與 Docker 決策詳見 `docs/runtime-strategy.md`。
-
-將 AWS history 與 SSH snapshot 合併成規則分析與 Markdown：
-
-```powershell
-node bin/ops-audit.mjs aws-analyze `
-  reports/history/aws-14d.json `
-  reports/example-wp-staging.json `
-  reports/history/aws-14d-analysis.json `
-  reports/history/aws-14d-analysis.md
-```
-
-分析會分開輸出 `operational_action` 與 `rightsizing_status`；CPU 有餘裕不等於整機可降規，近期 OOM、缺少 guest RAM 歷史或 coverage 不足都會阻擋降規。
-
-每日手動執行可用單一命令：
-
-```powershell
-$env:AWS_PROFILE='ops-toolkit-readonly'
-$env:AWS_SHARED_CREDENTIALS_FILE='C:/Users/your-name/.aws/credentials'
-$env:AWS_CONFIG_FILE='C:/Users/your-name/.aws/config'
-$env:SSH_CONFIG='C:/Users/your-name/.ssh/config'
-$env:SSH_COMMAND='C:/Program Files/Git/usr/bin/ssh.exe'
-node bin/ops-audit.mjs daily example-wp-staging 14
-```
-
-輸出位於 `reports/history/<UTC日期>/<target>/`，包含 host JSON/Markdown、AWS history JSON、AWS 分析 JSON/Markdown 與 `manifest.json`。不同日期不會互相覆寫；同一天重跑會更新當日結果。正式建立排程前，先手動完成一次端到端驗證。
-
-Windows 排程使用未追蹤的 `config/daily-all.local.cmd`；格式以 `config/daily-all.example.cmd` 為準。Task Scheduler 每天本機時間 08:20 執行所有已啟用專案、錯過時間後補跑、最多執行 10 分鐘，並禁止同一工作重複併行。排程只在該 Windows 使用者登入時執行，因此不需把密碼存入 Task Scheduler。
-
-請在不公開的營運清冊記錄監控排程、檢討日期、負擔與退場方式。短期觀測完成後依清冊停用或降頻，通用排程操作見下方文件。
-
-目前排程名稱、驗證方式與限制詳見 `docs/windows-scheduler.md`。
-
-## 選用 CloudWatch Agent
-
-CloudWatch Agent 不是執行 Host Assessment 的必要條件。只有在需要 guest RAM、swap 與 filesystem 歷史，且既有監控沒有這些資料時才安裝；Agent 發布的是可能計費的 custom metrics，也會占用主機 CPU、RAM、磁碟與網路。
-
-本 repo 的最小設定固定為 60 秒、metrics-only，只收 `mem_used_percent`、`swap_used_percent` 與 root `/` 的 `disk_used_percent`，不收 logs、traces 或 process。EC2 應使用 instance role 發布 metrics，不可把 IAM User Access Key 放進主機。
-
-部署順序是先在 staging 觀察 24～48 小時，再決定 production；安裝、驗證、回滾及可重複腳本見 `docs/cloudwatch-agent-installation.md`，成本與負載限制見 `docs/cloudwatch-agent-impact.md`。移除 Agent 或 IAM role 都是主機／AWS 變更，不屬於每日唯讀盤點。
-
-## 給 AI 協作者
-
-AI 執行前必須遵循 `AGENTS.md`。預設只允許閱讀 repo、做本機語法檢查，以及在使用者指定主機後執行唯讀盤點；連線遠端、修改設定或建立 commit 都必須符合其中的操作邊界。
-
-## 安全與公開分享
-
-不要提交真實的 `reports/`、`config/*.local.*`、`config/hosts.tsv`、`.env`、私鑰或雲端憑證。公開報告前應移除 IP、hostname、帳號、instance／volume ID、客戶與訂單資訊。漏洞通報與支援範圍見 `SECURITY.md`；建立乾淨公開副本的檢查清單見 `docs/public-release.md`。
-
-匿名輸入與輸出範例位於 `examples/`。它們只用於展示 schema 與報告格式，不代表任何真實主機。
-
-## 授權
-
-本專案以 MIT License 釋出，詳見 `LICENSE`。
-
-## 後續方向
-
-後續會依 `ROADMAP.md` 推進。AWS 唯讀 collector 已可將 instance 規格、CloudWatch 與 SSH 健檢結果合併；下一階段包含 GCP adapter、動態價格、公開版安全檢查與更完整的自動化。詳細機型與成本評估原則請參考 `docs/cloud-rightsizing.md`。
+漏洞通報見 [SECURITY.md](SECURITY.md)，後續功能見 [ROADMAP](ROADMAP.md)，維護者發布流程見 [發布指南](docs/public-release.md)。本專案採 [MIT License](LICENSE)。
