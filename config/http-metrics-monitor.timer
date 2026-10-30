@@ -1,0 +1,12 @@
+[Unit]
+Description=Run ops-toolkit HTTP metrics sampler every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=3s
+Unit=ops-toolkit-http-metrics-monitor.service
+
+[Install]
+WantedBy=timers.target

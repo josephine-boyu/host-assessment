@@ -1,0 +1,22 @@
+[Unit]
+Description=ops-toolkit lightweight crawler resource sampler
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/ops-toolkit-crawler-monitor
+Restart=on-failure
+RestartSec=10s
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/ops-toolkit/crawler-history
+MemoryMax=32M
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

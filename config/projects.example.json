@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "projects": [
+    {
+      "id": "example-wp-staging",
+      "type": "wordpress",
+      "enabled": true,
+      "ssh": {
+        "target": "example-wp-staging"
+      },
+      "cloud": {
+        "provider": "aws",
+        "profile": "ops-toolkit-readonly",
+        "region": "ap-northeast-1"
+      },
+      "history_days": 14,
+      "workload": {
+        "php_fpm": {
+          "expected_concurrency": 4
+        }
+      }
+    },
+    {
+      "id": "example-production",
+      "type": "wordpress",
+      "enabled": false,
+      "ssh": {
+        "target": "example-production"
+      },
+      "cloud": {
+        "provider": "aws",
+        "profile": "ops-toolkit-readonly",
+        "region": "ap-northeast-1"
+      },
+      "history_days": 14
+    },
+    {
+      "id": "example-crawler",
+      "type": "crawler",
+      "enabled": false,
+      "include_in_daily_all": false,
+      "ssh": {
+        "target": "example-crawler"
+      },
+      "cloud": {
+        "provider": "none"
+      },
+      "history_days": 14
+    }
+  ]
+}

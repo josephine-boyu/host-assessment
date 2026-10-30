@@ -1,0 +1,27 @@
+name: Offline validation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y jq gawk
+      - run: npm ci
+      - run: npm test
+      - run: find scripts config -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - run: bash -n audit-all.sh && bash -n wp-server-audit.sh
+      - run: node scripts/export-public-copy.mjs .tmp-public-release-ci
+      - run: npm ci && npm test
+        working-directory: .tmp-public-release-ci
+      - run: node bin/ops-audit.mjs analyze examples/host-snapshot.json reports/demo.json reports/demo.md
+        working-directory: .tmp-public-release-ci
+      - name: Scan public draft without network access
+        run: |
+          docker pull ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          docker run --rm --network none -v "$PWD/.tmp-public-release-ci:/repo:ro" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir /repo --redact --no-banner

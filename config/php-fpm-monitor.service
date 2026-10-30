@@ -1,0 +1,35 @@
+[Unit]
+Description=ops-toolkit PHP-FPM resource sampler
+After=php-fpm.service httpd.service
+Wants=php-fpm.service httpd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/ops-toolkit-php-fpm-monitor
+User=root
+Group=root
+UMask=0027
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=CAP_SYS_PTRACE
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+ReadWritePaths=/var/lib/ops-toolkit/php-fpm-history
+MemoryMax=64M
+TimeoutStartSec=10s
+StandardOutput=null
+StandardError=journal

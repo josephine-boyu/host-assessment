@@ -1,0 +1,30 @@
+# 本機設定與盤點目標
+.env
+.env.*
+!.env.example
+config/hosts.tsv
+config/daily.local.cmd
+config/daily-all.local.cmd
+config/projects.local.json
+config/public-export.local.json
+config/*.local.*
+
+# SSH 私鑰與憑證不得進入版本控制
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# 健檢輸出可能包含主機與服務資訊
+reports/
+.tmp-tests/
+.tmp-public-release*/
+
+# 編輯器與作業系統檔案
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/

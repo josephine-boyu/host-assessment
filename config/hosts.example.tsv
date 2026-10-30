@@ -1,0 +1,3 @@
+# project	environment	ssh_target	audit_script
+example-site	staging	example-wp-staging	wp-server-audit.sh
+second-project	production	second-project-production	wp-server-audit.sh

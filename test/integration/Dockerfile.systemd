@@ -1,0 +1,13 @@
+FROM amazonlinux:2023
+RUN dnf install -y systemd httpd php-fpm jq sudo logrotate iproute procps-ng findutils diffutils tar gzip && dnf clean all
+RUN mkdir -p /run/php-fpm /var/www/html /opt/ops-toolkit && \
+    printf 'ok\n' > /var/www/html/index.html && \
+    printf 'ServerName localhost\n' > /etc/httpd/conf.d/test-servername.conf && \
+    systemctl enable httpd php-fpm
+COPY config /opt/ops-toolkit/config
+COPY scripts /opt/ops-toolkit/scripts
+COPY test/integration /opt/ops-toolkit/test/integration
+RUN chmod +x /opt/ops-toolkit/test/integration/local-ssh.sh /opt/ops-toolkit/test/integration/local-scp.sh
+ENV container=docker OPS_TOOLKIT_CONTAINER_TEST=1
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

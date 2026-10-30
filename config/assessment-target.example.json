@@ -1,0 +1,17 @@
+{
+  "mode": "target",
+  "workload": "wordpress",
+  "required_event": "business-peak",
+  "target": {
+    "instance_type": "example-target",
+    "memory_mib": 4096,
+    "vcpus": 2,
+    "cpu_baseline_percent": null,
+    "network_baseline_mib_s": null,
+    "ebs_baseline_iops": null,
+    "ebs_baseline_mib_s": null,
+    "compatibility_verified": false,
+    "evidence_source": null,
+    "verified_at": null
+  }
+}

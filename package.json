@@ -1,0 +1,21 @@
+{
+  "name": "host-assessment",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ops-audit": "./bin/ops-audit.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1124.0",
+    "@aws-sdk/client-ec2": "^3.1124.0",
+    "@aws-sdk/client-sts": "^3.1124.0"
+  }
+}

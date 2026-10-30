@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "target": "example-wp-staging",
+  "analyzed_at": "2026-10-27T05:36:56.269Z",
+  "overall_severity": "warning",
+  "php_fpm_candidate": {
+    "apply_automatically": false,
+    "expected_concurrency": 3,
+    "memory_total_mb": 1913,
+    "observed_worker_rss_max_mb": 128,
+    "observed_worker_memory_mb": 128,
+    "observed_worker_memory_source": "snapshot_rss",
+    "safety_factor": 1.25,
+    "status": "candidate",
+    "reason": null,
+    "pm": "ondemand",
+    "max_children": 3,
+    "max_requests": 300,
+    "process_idle_timeout_seconds": 10,
+    "reserved_non_php_mb": 670,
+    "available_for_php_mb": 1243,
+    "worker_budget_mb": 160,
+    "memory_capacity_children": 7,
+    "confidence": "medium"
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "low_memory_without_swap",
+      "summary": "低記憶體主機沒有 swap 緩衝",
+      "evidence": {
+        "memory_total_mb": 1913,
+        "swap_total_mb": 0
+      },
+      "recommendation": "評估建立受控 swap 作為瞬間尖峰緩衝，並同步監控 swap-in/out；swap 不能取代足夠 RAM。",
+      "confidence": "high"
+    },
+    {
+      "severity": "recommendation",
+      "code": "php_slowlog_disabled",
+      "summary": "PHP-FPM slow log 尚未啟用",
+      "evidence": {
+        "service": "php-fpm"
+      },
+      "recommendation": "在確認路徑、權限、rotation 與效能影響後，於觀測期間啟用 request_slowlog_timeout。",
+      "confidence": "high"
+    },
+    {
+      "severity": "recommendation",
+      "code": "web_restart_disabled",
+      "summary": "httpd 未設定 systemd 自動重啟",
+      "evidence": {
+        "service": "httpd",
+        "restart_policy": "no"
+      },
+      "recommendation": "先確認既有監控與復原方式，再評估使用適合的 Restart policy；這不是所有環境都必須變更。",
+      "confidence": "medium"
+    },
+    {
+      "severity": "recommendation",
+      "code": "php_fpm_peak_history_missing",
+      "summary": "尚未取得 PHP-FPM 尖峰歷史",
+      "evidence": {
+        "snapshot_worker_count": 2,
+        "snapshot_worker_rss_max_mb": 128
+      },
+      "recommendation": "以 localhost-only status 與低負擔 sampler 收集 active、queue、max children reached、RSS/PSS；不要公開 full status。",
+      "confidence": "high"
+    },
+    {
+      "severity": "recommendation",
+      "code": "http_performance_history_missing",
+      "summary": "尚未取得匿名 HTTP latency／5xx 歷史",
+      "evidence": {},
+      "recommendation": "僅保存 timestamp、status 與 duration 的數值彙總，不收 IP、URL、Cookie 或 request body。",
+      "confidence": "high"
+    },
+    {
+      "severity": "recommendation",
+      "code": "php_fpm_candidate_available",
+      "summary": "已依 RAM、worker RSS 與預期並行數產生 PHP-FPM 候選值",
+      "evidence": {
+        "pm": "ondemand",
+        "max_children": 3,
+        "max_requests": 300
+      },
+      "recommendation": "先在測試站套用、壓測並觀察 queue、max children reached、OOM 與延遲，再人工核准正式站設定。",
+      "confidence": "medium"
+    },
+    {
+      "severity": "info",
+      "code": "snapshot_not_enough_for_downsize",
+      "summary": "單次快照不足以支持降規",
+      "evidence": {
+        "observation_type": "snapshot",
+        "php_fpm_history_available": false
+      },
+      "recommendation": "PHP-FPM 歷史可支持 pool 調校，但整機降規仍需至少 14～30 天 CPU、RAM、I/O、網路、延遲、錯誤率與業務尖峰證據。",
+      "confidence": "high"
+    }
+  ]
+}
